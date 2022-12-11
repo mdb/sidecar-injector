@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("sidecar injector controller", func() {
@@ -56,6 +57,15 @@ var _ = Describe("sidecar injector controller", func() {
 			}
 
 			Expect(k8sClient.Create(ctx, deployment)).Should(Succeed())
+
+			var result appsv1.Deployment
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: namespace,
+				Name:      deploymentName,
+			}, &result)
+
+			Expect(err).Should(BeNil())
+			Expect(result.Spec.Template.Spec.Containers[1].Name).Should(Equal("foo"))
 		})
 	})
 })
