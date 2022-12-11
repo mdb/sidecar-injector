@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -31,15 +30,26 @@ var _ = Describe("sidecar injector controller", func() {
 					Namespace: namespace,
 				},
 				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app": deploymentName,
+						},
+					},
 					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: deploymentName,
+							Labels: map[string]string{
+								"app": deploymentName,
+							},
+						},
 						Spec: corev1.PodSpec{
-							Containers: []v1.Container{
+							Containers: []corev1.Container{
 								{
 									Name:  "test-container",
 									Image: "test-image",
 								},
 							},
-							RestartPolicy: v1.RestartPolicyOnFailure,
+							RestartPolicy: corev1.RestartPolicyAlways,
 						},
 					},
 				},
