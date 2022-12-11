@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,6 +18,8 @@ var _ = Describe("sidecar injector controller", func() {
 	const (
 		deploymentName = "test-deployment"
 		namespace      = "default"
+		timeout        = time.Second * 10
+		interval       = time.Millisecond * 250
 	)
 
 	Context("When a Deployment is created", func() {
@@ -59,13 +63,23 @@ var _ = Describe("sidecar injector controller", func() {
 			Expect(k8sClient.Create(ctx, deployment)).Should(Succeed())
 
 			var result appsv1.Deployment
-			err := k8sClient.Get(ctx, types.NamespacedName{
-				Namespace: namespace,
-				Name:      deploymentName,
-			}, &result)
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespace,
+					Name:      deploymentName,
+				}, &result)
+				if err != nil {
+					return false
+				}
+				if len(result.Spec.Template.Spec.Containers) != 2 {
+					return false
+				}
 
-			Expect(err).Should(BeNil())
-			Expect(result.Spec.Template.Spec.Containers[1].Name).Should(Equal("foo"))
+				return true
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(result.Spec.Template.Spec.Containers[1].Name).Should(Equal(fmt.Sprintf("%s-sidecar", deploymentName)))
+			Expect(result.Spec.Template.Spec.Containers[1].Image).Should(Equal("busybox"))
 		})
 	})
 })
