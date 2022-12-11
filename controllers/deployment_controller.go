@@ -18,8 +18,10 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -39,7 +41,7 @@ type DeploymentReconciler struct {
 // move the current state of the cluster closer to the desired state.
 // It's called each time a Deployment is created, updated, or deleted.
 // When a Deployment is created or updated, it makes sure the Pod template features
-// the desired sidecar container. When a Pod is deleted, it ignores the deletion.
+// the desired sidecar container. When a Deployment is deleted, it ignores the deletion.
 func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
@@ -52,6 +54,39 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		log.Error(err, "unable to fetch Deployment")
+
+		return ctrl.Result{}, err
+	}
+
+	// sidecar is a simple busybox-based container that sleeps for 36000.
+	// The sidecar container is always named "<deploymentname>-sidecar".
+	sidecar := corev1.Container{
+		Name:    fmt.Sprintf("%s-sidecar", deployment.Name),
+		Image:   "busybox",
+		Command: []string{"sleep"},
+		Args:    []string{"36000"},
+	}
+
+	// This is a crude way to ensure the controller doesn't attempt to add
+	// redundant sidecar containers, which would result in an error a la:
+	// Deployment.apps \"foo\" is invalid: spec.template.spec.containers[2].name: Duplicate value: \"foo-sidecar\"
+	for _, c := range deployment.Spec.Template.Spec.Containers {
+		if c.Name == sidecar.Name && c.Image == sidecar.Image {
+			return ctrl.Result{}, nil
+		}
+	}
+
+	// Otherwise, add the sidecar to the deployment's containers.
+	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
+
+	if err := r.Update(ctx, &deployment); err != nil {
+		// The Deployment has been updated or deleted since initially readiing it.
+		if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
+			// Requeue the Deployment to try to reconciliate again.
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		log.Error(err, "unable to update Deployment")
 
 		return ctrl.Result{}, err
 	}
