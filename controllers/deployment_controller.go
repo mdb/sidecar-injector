@@ -80,7 +80,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
 
 	if err := r.Update(ctx, &deployment); err != nil {
-		// The Deployment has been updated or deleted since initially readiing it.
+		// The Deployment has been updated or deleted since initially reading it.
 		if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
 			// Requeue the Deployment to try to reconciliate again.
 			return ctrl.Result{Requeue: true}, nil
